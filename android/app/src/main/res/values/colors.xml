@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Paleta EDU-IPTV PRO -->
+    <color name="colorPrimary">#05050A</color>
+    <color name="colorPrimaryDark">#05050A</color>
+    <color name="colorAccent">#00F3FF</color>
+
+    <!-- Fondo del splash: mismo azul-noche que la app (evita el salto blanco -> negro) -->
+    <color name="splashBackground">#05050A</color>
+    <color name="splashNeon">#00F3FF</color>
+</resources>
