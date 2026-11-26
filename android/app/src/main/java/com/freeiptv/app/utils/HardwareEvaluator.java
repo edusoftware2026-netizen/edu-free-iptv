@@ -128,8 +128,17 @@ public class HardwareEvaluator {
 
             // Reproductores externos instalados
             JSArray players = getInstalledPlayers(context);
+            boolean hasRecommended = false;
+            for (int i = 0; i < players.length(); i++) {
+                org.json.JSONObject pObj = players.optJSONObject(i);
+                if (pObj != null && pObj.optBoolean("isRecommended", false)) {
+                    hasRecommended = true;
+                    break;
+                }
+            }
             result.put("installedPlayers", players);
             result.put("hasExternalPlayer", players.length() > 0);
+            result.put("hasRecommendedExternalPlayer", hasRecommended);
 
         } catch (Exception e) {
             Log.e(TAG, "Error evaluando hardware", e);

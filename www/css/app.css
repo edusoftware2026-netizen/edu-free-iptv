@@ -19,6 +19,17 @@
   max-height: 540px;
   object-fit: contain;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.boot__video.is-ready {
+  opacity: 1;
+}
+.boot__video::-webkit-media-controls,
+.boot__video::-webkit-media-controls-panel,
+.boot__video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
 }
 .boot.is-hidden {
   opacity: 0;

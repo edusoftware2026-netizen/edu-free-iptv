@@ -1126,6 +1126,49 @@ export async function openRemoteControlModal() {
   });
 }
 
+export function showHardwareRecommendationModal(hw) {
+  const deviceName = [hw?.manufacturer, hw?.model].filter(Boolean).join(' ') || 'Dispositivo Android';
+  const abi = hw?.primaryAbi || 'desconocida';
+  const reason = hw?.isX86
+    ? `Se detectó arquitectura <strong>${escapeHtml(abi)}</strong> en <strong>${escapeHtml(deviceName)}</strong>. Este entorno no cuenta con aceleración H.264 completa para ExoPlayer.`
+    : `El dispositivo <strong>${escapeHtml(deviceName)}</strong> (${escapeHtml(abi)}) tiene decodificación de video por hardware limitada.`;
+
+  const body = `
+    <div style="display:grid;gap:12px;font-size:0.88rem;line-height:1.5;color:var(--text-2)">
+      <p style="margin:0">${reason}</p>
+      <p style="margin:0">Para reproducir canales HD/FHD sin cortes ni fallos de códec, te recomendamos instalar <strong>VLC for Android</strong> (o usar el modo web integrado).</p>
+    </div>
+  `;
+
+  const m = modal({
+    title: 'Compatibilidad de Video Detectada',
+    body,
+    wide: false,
+    footer: `
+      <button type="button" class="btn btn--ghost" data-focusable data-hw-web>Usar modo Web</button>
+      <button type="button" class="btn btn--primary" data-focusable data-hw-vlc>Instalar VLC</button>
+    `,
+  });
+
+  if (!m) return;
+  m.root.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-hw-web]')) {
+      store.setSettings({ engine: 'web' });
+      toast('Motor cambiado a HLS.js (Web)', 'ok', 2500);
+      m.close();
+      return;
+    }
+    if (e.target.closest('[data-hw-vlc]')) {
+      try {
+        await window.Capacitor?.Plugins?.ExoPlayerPlugin?.openPlayStore({ packageName: 'org.videolan.vlc' });
+      } catch (_) {
+        window.open('https://play.google.com/store/apps/details?id=org.videolan.vlc', '_blank');
+      }
+      m.close();
+    }
+  });
+}
+
 export default {
   openFreeCountriesModal,
   showCatalogLoadingModal,
@@ -1135,4 +1178,5 @@ export default {
   openManageCategoriesModal,
   openLegalModal,
   openRemoteControlModal,
+  showHardwareRecommendationModal,
 };

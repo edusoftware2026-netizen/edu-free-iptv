@@ -3,6 +3,7 @@
 import { escapeAttr, escapeHtml, fmtDuration, canCast, isWifiConnected, openCastSettings } from '../core/util.js';
 import { Focus } from '../core/focus.js';
 import { store } from '../core/store.js';
+import { navigate } from '../core/router.js';
 import { isItemLocked, isSessionUnlocked } from '../core/parental.js';
 import { openFreeCountriesModal, showCatalogLoadingModal, openExternalListsModal, openExitModal, showPinModal, openManageCategoriesModal } from './modals.js';
 import { switchToProfile } from '../core/catalog.js';

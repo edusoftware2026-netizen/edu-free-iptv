@@ -3,6 +3,7 @@ import { store } from './core/store.js';
 import { Focus } from './core/focus.js';
 import Router, { navigate, register, start } from './core/router.js';
 import { initUI, toast, showPinModal } from './ui/dom.js';
+import { showHardwareRecommendationModal } from './ui/modals.js';
 import { isSessionUnlocked, unlockSession } from './core/parental.js';
 import * as Parental from './core/parental.js';
 import { parseHash, isTv } from './core/util.js';
@@ -157,6 +158,10 @@ function boot() {
       clearTimeout(fallbackTimer);
       hideBoot();
     };
+    const showVideo = () => bootVideo.classList.add('is-ready');
+    bootVideo.addEventListener('loadeddata', showVideo, { once: true });
+    bootVideo.addEventListener('playing', showVideo, { once: true });
+    if (bootVideo.readyState >= 2) showVideo();
     bootVideo.addEventListener('ended', finishBoot, { once: true });
     bootVideo.addEventListener('error', finishBoot, { once: true });
     bootVideo.play?.().catch(() => {});
@@ -174,8 +179,14 @@ function boot() {
   Player.evaluateHardware().then((hw) => {
     if (hw?.isHardwareLimited) {
       Logger.warn('Hardware', 'Hardware limitado detectado: ' + (hw.statusDetail || ''));
-      if (hw.hasExternalPlayer) {
+      if (hw.hasRecommendedExternalPlayer) {
         toast('Modo inteligente: Reproductor externo compatible listo', 'info', 3500);
+      } else {
+        const key = 'edu_iptv_hw_prompt_v1';
+        if (!localStorage.getItem(key)) {
+          localStorage.setItem(key, '1');
+          setTimeout(() => showHardwareRecommendationModal(hw), 4400);
+        }
       }
     } else {
       Logger.info('Hardware', 'Hardware estándar con aceleración de video OK');

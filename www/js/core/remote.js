@@ -12,6 +12,60 @@ import { Logger } from './logger.js';
 
 let initialized = false;
 let isPlaying = false;
+let ptrEl = null;
+let ptrX = 0;
+let ptrY = 0;
+let ptrTimer = 0;
+
+function ensurePointer() {
+  if (ptrEl) return ptrEl;
+  ptrX = Math.round(window.innerWidth / 2);
+  ptrY = Math.round(window.innerHeight / 2);
+  const el = document.createElement('div');
+  el.id = 'remote-pointer';
+  el.style.cssText = 'position:fixed;left:0;top:0;width:22px;height:22px;border-radius:50%;'
+    + 'border:2.5px solid #00f3ff;background:rgba(0,243,255,0.28);'
+    + 'box-shadow:0 0 14px rgba(0,243,255,0.85);pointer-events:none;z-index:99999;'
+    + 'transform:translate(-50%,-50%);display:none;transition:left .04s linear,top .04s linear;';
+  document.body.appendChild(el);
+  ptrEl = el;
+  return el;
+}
+
+function showPointer() {
+  const el = ensurePointer();
+  el.style.left = `${ptrX}px`;
+  el.style.top = `${ptrY}px`;
+  el.style.display = 'block';
+  clearTimeout(ptrTimer);
+  ptrTimer = setTimeout(() => { if (ptrEl) ptrEl.style.display = 'none'; }, 5500);
+}
+
+function handlePointer(cmd) {
+  if (cmd.action === 'hide') {
+    clearTimeout(ptrTimer);
+    if (ptrEl) ptrEl.style.display = 'none';
+    return;
+  }
+  ensurePointer();
+  if (cmd.action === 'move') {
+    ptrX = Math.max(8, Math.min(window.innerWidth - 8, ptrX + (Number(cmd.dx) || 0)));
+    ptrY = Math.max(8, Math.min(window.innerHeight - 8, ptrY + (Number(cmd.dy) || 0)));
+    showPointer();
+    return;
+  }
+  if (cmd.action === 'click') {
+    showPointer();
+    ptrEl.style.display = 'none';
+    const hit = document.elementFromPoint(ptrX, ptrY);
+    ptrEl.style.display = 'block';
+    const target = hit?.closest?.('[data-focusable], button, a, input, select, textarea, [role="button"]') || hit;
+    if (target) {
+      target.focus?.();
+      target.click?.();
+    }
+  }
+}
 
 function plugin() {
   return window.Capacitor?.Plugins?.RemoteControlPlugin || null;
@@ -155,6 +209,11 @@ async function handleCommand(cmd) {
         inp.dispatchEvent(new Event('input', { bubbles: true }));
       }
     }, 120);
+    return;
+  }
+
+  if (cmd.type === 'pointer') {
+    handlePointer(cmd);
     return;
   }
 

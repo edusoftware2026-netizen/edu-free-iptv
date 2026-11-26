@@ -54,6 +54,12 @@ function guessMime(url) {
   return 'video/mp4';
 }
 
+function isWebPlayable(url) {
+  const u = String(url || '').toLowerCase();
+  if (/\.(mkv|avi|flv|wmv|ts)(\?|$)/i.test(u)) return false;
+  return true;
+}
+
 function alternateUrl(url) {
   const u = String(url || '');
   if (/\.m3u8(\?|$)/i.test(u)) return u.replace(/\.m3u8(\?|$)/i, '.ts$1');
@@ -97,14 +103,27 @@ async function bindNative() {
       const url = data?.url || current?.url;
       const title = data?.title || current?.title || 'Canal';
       const engine = store.state.settings.engine || 'auto';
+      const hw = cachedHardware || (await evaluateHardware().catch(() => null));
 
-      if (engine === 'auto' || engine === 'external') {
-        Logger.info('Player', 'Conmutando automáticamente a Reproductor Externo (VLC)...');
+      if (engine === 'external' || (engine === 'auto' && hw?.hasRecommendedExternalPlayer)) {
+        Logger.info('Player', 'Conmutando automáticamente a Reproductor Externo...');
         await stop({ silent: true });
         const launched = await openExternal({ url, title });
         if (!launched) {
           showExternalPlayerPrompt(url, title);
         }
+      } else if (engine === 'auto' && current && !current.webFallbackTried && isWebPlayable(url)) {
+        current.webFallbackTried = true;
+        Logger.info('Player', 'Conmutando a reproductor web (HLS.js) por fallo de códec nativo');
+        try {
+          await plugin()?.stop();
+          current.mode = 'web';
+          await playWeb({ url, title, live: current.live, startPosition: current.startPosition || 0 });
+          emit('ready', { mode: 'web' });
+          return;
+        } catch (_) {}
+        await stop({ silent: true });
+        showExternalPlayerPrompt(url, title);
       } else {
         await stop({ silent: true });
         showExternalPlayerPrompt(url, title);
@@ -325,27 +344,34 @@ export async function play(item, options = {}) {
     return current;
   }
 
-  // 2. Si está en modo 'auto', evaluar hardware. Si es limitado y VLC/otro reproductor existe, ir directo a externo.
+  // 2. Si está en modo 'auto', evaluar hardware y tipo de contenido.
+  let forceWebInAuto = false;
   if (engine === 'auto' && isNativeAvailable()) {
     const hw = cachedHardware || (await evaluateHardware());
-    if (hw?.isHardwareLimited && hw?.hasExternalPlayer) {
-      current = {
-        item: item || null,
-        url,
-        title,
-        live,
-        mode: 'external',
-        startedAt: Date.now(),
-      };
-      if (item) store.setLastChannel(item);
-      emit('start', { item: current.item, url, live, mode: 'external' });
-      await openExternal({ url, title, live });
-      emit('ready', { mode: 'external' });
-      return current;
+    if (hw?.isHardwareLimited) {
+      if (hw?.hasRecommendedExternalPlayer) {
+        current = {
+          item: item || null,
+          url,
+          title,
+          live,
+          mode: 'external',
+          startedAt: Date.now(),
+        };
+        if (item) store.setLastChannel(item);
+        emit('start', { item: current.item, url, live, mode: 'external' });
+        await openExternal({ url, title, live });
+        emit('ready', { mode: 'external' });
+        return current;
+      }
+      if (isWebPlayable(url)) {
+        Logger.info('Player', 'Modo Auto: hardware limitado sin VLC/MX, usando HLS.js (web)');
+        forceWebInAuto = true;
+      }
     }
   }
 
-  const useNative = engine !== 'web' && isNativeAvailable();
+  const useNative = engine !== 'web' && !forceWebInAuto && isNativeAvailable();
 
   current = {
     item: item || null,
