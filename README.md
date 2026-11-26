@@ -1,4 +1,4 @@
-# Free-IPTV Pro 2.0
+# Free-IPTV Pro 1.0
 
 Cliente IPTV para Android TV construido sobre **Capacitor + WebView + ExoPlayer (Media3)**.
 Carga paneles **Xtream Codes** y listas **M3U**, con una interfaz propia cyan/oscura y un
