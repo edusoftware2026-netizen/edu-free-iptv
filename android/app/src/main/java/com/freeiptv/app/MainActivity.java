@@ -21,6 +21,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.WebViewListener;
 import com.freeiptv.app.plugins.ExoPlayerPlugin;
+import com.freeiptv.app.plugins.RemoteControlPlugin;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -58,6 +59,7 @@ public class MainActivity extends BridgeActivity {
         // El plugin debe registrarse ANTES de super.onCreate(): BridgeActivity
         // construye el Bridge (y carga los plugins) dentro de super.onCreate().
         this.registerPlugin(ExoPlayerPlugin.class);
+        this.registerPlugin(RemoteControlPlugin.class);
         super.onCreate(savedInstanceState);
         
         // Garantizar que los botones físicos de volumen en móviles controlen el audio multimedia

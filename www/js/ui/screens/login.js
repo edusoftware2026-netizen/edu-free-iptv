@@ -4,7 +4,7 @@ import { FREE_COUNTRIES, freeListUrl } from '../../core/m3u.js';
 import { navigate } from '../../core/router.js';
 import { Focus } from '../../core/focus.js';
 import { icon, modal, toast, openFreeCountriesModal } from '../dom.js';
-import { openExternalListsModal, showCatalogLoadingModal, openLegalModal } from '../modals.js';
+import { openExternalListsModal, showCatalogLoadingModal, openLegalModal, openRemoteControlModal } from '../modals.js';
 import { escapeAttr, escapeHtml, uid } from '../../core/util.js';
 
 export function parseXtreamLink(input) {
@@ -295,7 +295,8 @@ export default {
 
               <div class="login__foot">
                 <span>v.1.0.0 · EDU-IPTV PRO</span>
-                <div style="display:flex;gap:12px;align-items:center">
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+                  <button type="button" id="login-remote" data-focusable>📱 Desde el móvil</button>
                   <button type="button" id="login-legal" data-focusable>Términos y Privacidad</button>
                   <button type="button" id="free-lists" data-focusable>Usar listas gratis</button>
                 </div>
@@ -420,6 +421,7 @@ export default {
       else connectM3UUrl(root, form);
     });
 
+    root.querySelector('#login-remote')?.addEventListener('click', () => openRemoteControlModal());
     root.querySelector('#login-legal')?.addEventListener('click', () => openLegalModal('terms'));
     root.querySelector('#free-lists')?.addEventListener('click', () => openFreeCountriesModal());
 

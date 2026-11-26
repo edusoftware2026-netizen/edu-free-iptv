@@ -15,6 +15,8 @@ import { navigate } from '../core/router.js';
 import { Focus } from '../core/focus.js';
 import { icon, modal, toast, confirmDialog } from './dom.js';
 import { escapeAttr, escapeHtml, uid } from '../core/util.js';
+import { startRemoteServer, stopRemoteServer } from '../core/remote.js';
+import { renderQrSvg } from '../core/qr.js';
 
 const STORAGE_COUNTRIES_KEY = 'free_iptv_selected_countries';
 
@@ -1071,6 +1073,59 @@ export function openLegalModal(initialTab = 'terms') {
   });
 }
 
+export async function openRemoteControlModal() {
+  let info = null;
+  try {
+    info = await startRemoteServer();
+  } catch (err) {
+    toast(err?.message || 'No se pudo iniciar el control móvil', 'error', 3000);
+    return;
+  }
+
+  const qrSvg = renderQrSvg(info.url, 196);
+  const body = `
+    <div style="display:grid;gap:14px;justify-items:center;text-align:center">
+      <p style="font-size:0.88rem;color:var(--text-2);line-height:1.45;margin:0">
+        Escanea este QR con tu <strong>iPhone o Android</strong> (en el mismo Wi-Fi) para pegar listas M3U/Xtream y usar el control remoto desde el celular.
+      </p>
+      <div style="padding:10px;background:#fff;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,0.35)">
+        ${qrSvg || '<div style="color:#05050a;padding:16px">Usa la dirección de abajo</div>'}
+      </div>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid var(--line);border-radius:12px;padding:10px 14px;width:100%">
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px">Dirección local</div>
+        <div style="font-family:var(--mono);font-size:0.92rem;color:var(--accent);word-break:break-all">${escapeHtml(info.url)}</div>
+        <div style="font-size:0.8rem;color:var(--text-2);margin-top:6px">PIN de acceso: <strong style="color:var(--accent)">${escapeHtml(info.token)}</strong></div>
+      </div>
+      <p style="font-size:0.76rem;color:var(--muted);margin:0">
+        Puedes cerrar esta ventana; el control seguirá activo mientras la app esté abierta.
+      </p>
+    </div>
+  `;
+
+  const m = modal({
+    title: 'Control y Carga desde Móvil',
+    body,
+    wide: false,
+    footer: `
+      <button type="button" class="btn btn--ghost" data-focusable data-remote-stop>Apagar</button>
+      <button type="button" class="btn btn--primary" data-focusable data-cancel>Listo</button>
+    `,
+  });
+
+  if (!m) return;
+  m.root.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-remote-stop]')) {
+      await stopRemoteServer().catch(() => {});
+      toast('Control móvil desactivado', 'info', 1800);
+      m.close();
+      return;
+    }
+    if (e.target.closest('[data-cancel]')) {
+      m.close();
+    }
+  });
+}
+
 export default {
   openFreeCountriesModal,
   showCatalogLoadingModal,
@@ -1079,4 +1134,5 @@ export default {
   showPinModal,
   openManageCategoriesModal,
   openLegalModal,
+  openRemoteControlModal,
 };

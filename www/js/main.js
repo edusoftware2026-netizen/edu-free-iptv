@@ -6,6 +6,7 @@ import { initUI, toast, showPinModal } from './ui/dom.js';
 import { isSessionUnlocked, unlockSession } from './core/parental.js';
 import * as Parental from './core/parental.js';
 import { parseHash, isTv } from './core/util.js';
+import { initRemoteControl } from './core/remote.js';
 import * as Player from './player/player.js';
 
 import Login from './ui/screens/login.js';
@@ -123,6 +124,7 @@ function boot() {
 
   initUI();
   Focus.init();
+  initRemoteControl();
   bindGlobalClicks();
   bindBackButton();
   guardRoutes();

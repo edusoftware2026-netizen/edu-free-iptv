@@ -5,7 +5,7 @@ import { Focus } from '../../core/focus.js';
 import { Player, isNativeAvailable } from '../../player/player.js';
 import { Logger } from '../../core/logger.js';
 import { confirmDialog, icon, modal, topbar, toast, showPinModal, openManageCategoriesModal } from '../dom.js';
-import { openLegalModal } from '../modals.js';
+import { openLegalModal, openRemoteControlModal } from '../modals.js';
 import { escapeHtml, fmtDate, canCast, isWifiConnected, openCastSettings } from '../../core/util.js';
 
 function row(label, hint, control) {
@@ -151,6 +151,8 @@ export default {
                 ${row('EDU-IPTV PRO', 'Versión v.1.0.0', `<span class="muted">Universal (TV / Móvil)</span>`)}
                 ${row('Arquitectura', 'WebView + ExoPlayer Media3', `<span class="muted">Capacitor</span>`)}
                 ${row('Soporte', 'Xtream Codes y listas M3U', `<span class="muted">HLS / TS / MP4</span>`)}
+                ${row('Control móvil (QR)', 'Enviar listas y controlar TV desde iPhone o Android', `
+                  <button class="btn btn--ghost btn--sm" data-focusable data-action="remote-qr">📱 Abrir QR</button>`)}
                 ${row('Legal', 'Condiciones de uso y privacidad local', `
                   <div style="display:flex;gap:8px">
                     <button class="btn btn--ghost btn--sm" data-focusable data-action="legal-terms">Términos</button>
@@ -236,6 +238,11 @@ export default {
       const action = event.target.closest('[data-action]');
       if (!action) return;
       const name = action.dataset.action;
+
+      if (name === 'remote-qr') {
+        openRemoteControlModal();
+        return;
+      }
 
       if (name === 'legal-terms') {
         openLegalModal('terms');
