@@ -20,6 +20,20 @@ let progressTimer = 0;
 let lastSaved = 0;
 let fullscreen = false;
 let retriedFormat = false;
+let isStartingPlayback = false;
+let startLockTimer = 0;
+
+function acquireStartLock() {
+  isStartingPlayback = true;
+  clearTimeout(startLockTimer);
+  startLockTimer = setTimeout(() => { isStartingPlayback = false; }, 8000);
+}
+
+function releaseStartLock() {
+  isStartingPlayback = false;
+  clearTimeout(startLockTimer);
+  startLockTimer = 0;
+}
 
 function emit(name, detail) {
   const set = listeners.get(name);
@@ -60,6 +74,10 @@ function isWebPlayable(url) {
   return true;
 }
 
+function isHeavyContainer(url) {
+  return /\.(mkv|avi|flv|wmv)(\?|$)/i.test(String(url || '').toLowerCase());
+}
+
 function alternateUrl(url) {
   const u = String(url || '');
   if (/\.m3u8(\?|$)/i.test(u)) return u.replace(/\.m3u8(\?|$)/i, '.ts$1');
@@ -84,6 +102,9 @@ async function bindNative() {
   nativeBound = true;
   try {
     await p.addListener('playbackStateChanged', (data) => {
+      if (data?.playing || data?.state === 'ready' || data?.state === 'ended') {
+        releaseStartLock();
+      }
       emit('state', data);
     });
     await p.addListener('playerClosed', () => {
@@ -99,6 +120,7 @@ async function bindNative() {
       stop();
     });
     await p.addListener('videoCodecError', async (data) => {
+      releaseStartLock();
       Logger.warn('Player', 'Fallo de códec de video nativo: ' + JSON.stringify(data));
       const url = data?.url || current?.url;
       const title = data?.title || current?.title || 'Canal';
@@ -134,6 +156,7 @@ async function bindNative() {
         // Manejado prioritariamente por videoCodecError
         return;
       }
+      releaseStartLock();
       const message = data?.error || 'Error de reproduccion';
       Logger.warn('Player', message);
       const isHttpDead = message.includes('404') || message.includes('403') || message.includes('2004');
@@ -316,13 +339,23 @@ export async function play(item, options = {}) {
   const url = options.url || item?.url;
   if (!url) throw new Error('URL no disponible');
 
-  await stop({ silent: true });
+  if (isStartingPlayback && !options.retry) {
+    toast('Espera a que inicie la reproducción actual...', 'info', 1400);
+    return current;
+  }
+
+  acquireStartLock();
+
+  // Cerrar siempre cualquier reproducción previa antes de analizar o abrir la nueva
+  await stop({ silent: true, keepLock: true });
   if (!options.retry) retriedFormat = false;
 
   const live = !!options.live;
   const title = options.title || item?.name || 'Reproduccion';
   const startPosition = Number(options.startPosition || 0);
   const engine = store.state.settings.engine || 'auto';
+
+  emit('analyzing', { item: item || null, url, title, live });
 
   // 1. Si el usuario configuró explícitamente Reproductor Externo
   if (engine === 'external' && isNativeAvailable()) {
@@ -340,38 +373,38 @@ export async function play(item, options = {}) {
     if (!ok) {
       showExternalPlayerPrompt(url, title);
     }
+    releaseStartLock();
     emit('ready', { mode: 'external' });
     return current;
   }
 
-  // 2. Si está en modo 'auto', evaluar hardware y tipo de contenido.
-  let forceWebInAuto = false;
+  // 2. Modo Automático: analizar dispositivo y tipo de contenido.
+  //    - Dispositivos modernos: ExoPlayer nativo (SurfaceView + HW).
+  //    - Dispositivos antiguos/limitados:
+  //        * Contenedores pesados (.mkv/.avi/.flv/.wmv) -> VLC/MX si existe.
+  //        * Resto -> intentar DENTRO de la APK primero (ExoPlayer con TextureView + SW),
+  //          con fallback automático a HLS.js o reproductor externo si falla el códec.
   if (engine === 'auto' && isNativeAvailable()) {
     const hw = cachedHardware || (await evaluateHardware());
-    if (hw?.isHardwareLimited) {
-      if (hw?.hasRecommendedExternalPlayer) {
-        current = {
-          item: item || null,
-          url,
-          title,
-          live,
-          mode: 'external',
-          startedAt: Date.now(),
-        };
-        if (item) store.setLastChannel(item);
-        emit('start', { item: current.item, url, live, mode: 'external' });
-        await openExternal({ url, title, live });
-        emit('ready', { mode: 'external' });
-        return current;
-      }
-      if (isWebPlayable(url)) {
-        Logger.info('Player', 'Modo Auto: hardware limitado sin VLC/MX, usando HLS.js (web)');
-        forceWebInAuto = true;
-      }
+    if (hw?.isHardwareLimited && isHeavyContainer(url) && hw?.hasRecommendedExternalPlayer) {
+      current = {
+        item: item || null,
+        url,
+        title,
+        live,
+        mode: 'external',
+        startedAt: Date.now(),
+      };
+      if (item) store.setLastChannel(item);
+      emit('start', { item: current.item, url, live, mode: 'external' });
+      await openExternal({ url, title, live });
+      releaseStartLock();
+      emit('ready', { mode: 'external' });
+      return current;
     }
   }
 
-  const useNative = engine !== 'web' && !forceWebInAuto && isNativeAvailable();
+  const useNative = engine !== 'web' && isNativeAvailable();
 
   current = {
     item: item || null,
@@ -398,15 +431,18 @@ export async function play(item, options = {}) {
         bufferSeconds: Number(store.state.settings.buffer) || 30,
       });
       if (layout) await p.setLayout(layout).catch(() => {});
+      releaseStartLock();
       emit('ready', { mode: 'native' });
     } catch (err) {
       Logger.warn('Player', 'ExoPlayer fallo, usando web', err?.message || err);
       current.mode = 'web';
       await playWeb({ url, title, live, startPosition });
+      releaseStartLock();
       emit('ready', { mode: 'web' });
     }
   } else {
     await playWeb({ url, title, live, startPosition });
+    releaseStartLock();
     emit('ready', { mode: 'web' });
   }
 
@@ -415,7 +451,8 @@ export async function play(item, options = {}) {
   return current;
 }
 
-export async function stop({ silent = false } = {}) {
+export async function stop({ silent = false, keepLock = false } = {}) {
+  if (!keepLock) releaseStartLock();
   stopProgress();
   const was = current;
   current = null;

@@ -5,7 +5,7 @@ import { Focus } from '../../core/focus.js';
 import { Player, isNativeAvailable } from '../../player/player.js';
 import { Logger } from '../../core/logger.js';
 import { confirmDialog, icon, modal, topbar, toast, showPinModal, openManageCategoriesModal } from '../dom.js';
-import { openLegalModal, openRemoteControlModal } from '../modals.js';
+import { openLegalModal, openRemoteControlModal, openSpeedTestModal } from '../modals.js';
 import { escapeHtml, fmtDate, canCast, isWifiConnected, openCastSettings } from '../../core/util.js';
 
 function row(label, hint, control) {
@@ -93,6 +93,8 @@ export default {
                     <span class="chip ${this.hw?.isHardwareLimited ? 'warn' : 'is-active'}">${escapeHtml(this.hw?.primaryAbi || 'Android')}</span>
                     <button class="btn btn--ghost btn--sm" data-focusable data-action="test-hw">Detalles</button>
                   </div>`)}
+                ${row('Test de velocidad de red', 'Mide Mbps y Ping para verificar calidad SD / HD / FHD / 4K', `
+                  <button class="btn btn--ghost btn--sm" data-focusable data-action="speed-test">${icon('wifi', 'icon icon--sm')} Probar red</button>`)}
                 ${row('Buffer', 'Segundos de colchon para VOD y live', `
                   <select class="select" data-focusable data-buffer>
                     ${[15, 30, 45, 60].map((n) => `<option value="${n}"${Number(s.settings.buffer) === n ? ' selected' : ''}>${n} s</option>`).join('')}
@@ -241,6 +243,11 @@ export default {
 
       if (name === 'remote-qr') {
         openRemoteControlModal();
+        return;
+      }
+
+      if (name === 'speed-test') {
+        openSpeedTestModal();
         return;
       }
 

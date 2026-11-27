@@ -1169,6 +1169,208 @@ export function showHardwareRecommendationModal(hw) {
   });
 }
 
+export function openSpeedTestModal() {
+  let controller = null;
+  let running = false;
+
+  const body = `
+    <div style="display:grid;gap:14px;text-align:center">
+      <div style="background:rgba(255,255,255,0.03);border:1px solid var(--line);border-radius:16px;padding:18px 14px">
+        <div id="st-mbps" style="font-size:2.4rem;font-weight:800;letter-spacing:-0.02em;color:var(--accent)">0.0 <span style="font-size:1rem;color:var(--text-2);font-weight:600">Mbps</span></div>
+        <div id="st-status" style="font-size:0.84rem;color:var(--muted);margin-top:4px">Listo para medir latencia y descarga</div>
+        <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:99px;overflow:hidden;margin-top:12px">
+          <div id="st-bar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#22c55e);transition:width .18s ease"></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div style="background:rgba(255,255,255,0.03);border:1px solid var(--line);border-radius:12px;padding:10px 8px">
+          <div style="font-size:0.72rem;color:var(--muted)">Ping</div>
+          <div id="st-ping" style="font-weight:700;font-size:0.95rem;margin-top:2px">—</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.03);border:1px solid var(--line);border-radius:12px;padding:10px 8px">
+          <div style="font-size:0.72rem;color:var(--muted)">Jitter</div>
+          <div id="st-jitter" style="font-weight:700;font-size:0.95rem;margin-top:2px">—</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.03);border:1px solid var(--line);border-radius:12px;padding:10px 8px">
+          <div style="font-size:0.72rem;color:var(--muted)">Calidad IPTV</div>
+          <div id="st-quality" style="font-weight:700;font-size:0.95rem;margin-top:2px">—</div>
+        </div>
+      </div>
+
+      <div id="st-verdict" style="font-size:0.82rem;color:var(--text-2);line-height:1.45;min-height:2.4em">
+        Mínimo recomendado: 5 Mbps (HD), 12 Mbps (Full HD) y 25+ Mbps (4K).
+      </div>
+    </div>
+  `;
+
+  const m = modal({
+    title: 'Test de Velocidad IPTV',
+    body,
+    wide: false,
+    footer: `
+      <button type="button" class="btn btn--ghost" data-focusable data-st-close>Cerrar</button>
+      <button type="button" class="btn btn--primary" id="st-start" data-focusable>Iniciar prueba</button>
+    `,
+  });
+
+  if (!m) return;
+
+  const mbpsEl = m.root.querySelector('#st-mbps');
+  const statusEl = m.root.querySelector('#st-status');
+  const barEl = m.root.querySelector('#st-bar');
+  const pingEl = m.root.querySelector('#st-ping');
+  const jitterEl = m.root.querySelector('#st-jitter');
+  const qualityEl = m.root.querySelector('#st-quality');
+  const verdictEl = m.root.querySelector('#st-verdict');
+  const startBtn = m.root.querySelector('#st-start');
+
+  const stopTest = () => {
+    running = false;
+    if (controller) {
+      try { controller.abort(); } catch (_) {}
+      controller = null;
+    }
+  };
+
+  async function runSpeedTest() {
+    if (running) return;
+    running = true;
+    controller = new AbortController();
+    const signal = controller.signal;
+
+    startBtn.disabled = true;
+    startBtn.textContent = 'Probando...';
+    barEl.style.width = '5%';
+    pingEl.textContent = '...';
+    jitterEl.textContent = '...';
+    qualityEl.textContent = '...';
+    qualityEl.style.color = 'var(--text)';
+    verdictEl.textContent = 'Evaluando estabilidad de red para streaming...';
+
+    try {
+      // 1. Medir Ping y Jitter (3 muestras)
+      statusEl.textContent = 'Midiendo latencia (Ping)...';
+      const pings = [];
+      for (let i = 0; i < 3; i++) {
+        if (!running) return;
+        const t0 = performance.now();
+        await fetch(`https://speed.cloudflare.com/__down?bytes=0&t=${Date.now()}_${i}`, {
+          cache: 'no-store',
+          signal,
+        });
+        pings.push(performance.now() - t0);
+        barEl.style.width = `${10 + (i + 1) * 8}%`;
+      }
+      const avgPing = Math.round(pings.reduce((a, b) => a + b, 0) / pings.length);
+      const jitter = Math.round(Math.max(...pings) - Math.min(...pings));
+      pingEl.textContent = `${avgPing} ms`;
+      jitterEl.textContent = `${jitter} ms`;
+
+      // 2. Medir descarga en streaming (10 MB o máx. 9 s)
+      statusEl.textContent = 'Midiendo velocidad de descarga...';
+      const dlTimeout = setTimeout(() => { try { controller?.abort(); } catch (_) {} }, 9000);
+      const tStart = performance.now();
+      let loadedBytes = 0;
+      let lastUi = tStart;
+      let finalMbps = 0;
+
+      try {
+        const res = await fetch(`https://speed.cloudflare.com/__down?bytes=10000000&t=${Date.now()}`, {
+          cache: 'no-store',
+          signal,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        if (res.body?.getReader) {
+          const reader = res.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            loadedBytes += value.byteLength;
+            const now = performance.now();
+            if (now - lastUi >= 160) {
+              const sec = Math.max(0.05, (now - tStart) / 1000);
+              const mbps = (loadedBytes * 8) / (sec * 1e6);
+              finalMbps = mbps;
+              mbpsEl.innerHTML = `${mbps.toFixed(1)} <span style="font-size:1rem;color:var(--text-2);font-weight:600">Mbps</span>`;
+              const pct = Math.min(98, 34 + Math.round((loadedBytes / 10000000) * 64));
+              barEl.style.width = `${pct}%`;
+              lastUi = now;
+            }
+          }
+        } else {
+          const buf = await res.arrayBuffer();
+          loadedBytes = buf.byteLength;
+        }
+      } catch (err) {
+        // Si fue abortado por el timeout de 9s pero ya descargó datos, calculamos con lo recibido
+        if (!(err?.name === 'AbortError' && loadedBytes > 250000 && running)) {
+          throw err;
+        }
+      } finally {
+        clearTimeout(dlTimeout);
+      }
+
+      if (!running) return;
+      const totalSec = Math.max(0.1, (performance.now() - tStart) / 1000);
+      finalMbps = (loadedBytes * 8) / (totalSec * 1e6);
+
+      mbpsEl.innerHTML = `${finalMbps.toFixed(1)} <span style="font-size:1rem;color:var(--text-2);font-weight:600">Mbps</span>`;
+      barEl.style.width = '100%';
+      statusEl.textContent = 'Prueba completada';
+
+      let qLabel = 'Solo SD';
+      let qColor = 'var(--warn)';
+      let msg = 'Conexión justa: apta para SD. Canales HD/FHD pueden presentar pausas.';
+
+      if (finalMbps >= 25) {
+        qLabel = '4K / UHD';
+        qColor = 'var(--ok)';
+        msg = 'Conexión excelente: soporta 4K/UHD, Full HD y zapping rápido sin cortes.';
+      } else if (finalMbps >= 12) {
+        qLabel = 'Full HD';
+        qColor = 'var(--ok)';
+        msg = 'Conexión muy buena: soporta canales y películas en Full HD (1080p) con fluidez.';
+      } else if (finalMbps >= 5) {
+        qLabel = 'HD 720p';
+        qColor = 'var(--accent)';
+        msg = 'Conexión buena: apta para la mayoría de canales HD (720p).';
+      }
+
+      if (avgPing > 160) {
+        msg += ' Nota: el ping es alto, los canales pueden tardar un poco más en abrir.';
+      }
+
+      qualityEl.textContent = qLabel;
+      qualityEl.style.color = qColor;
+      verdictEl.textContent = msg;
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        statusEl.textContent = 'No se pudo completar la prueba';
+        verdictEl.textContent = 'Verifica tu conexión a Internet e inténtalo de nuevo.';
+        barEl.style.width = '0%';
+      }
+    } finally {
+      running = false;
+      controller = null;
+      startBtn.disabled = false;
+      startBtn.textContent = 'Repetir prueba';
+    }
+  }
+
+  m.root.addEventListener('click', (e) => {
+    if (e.target.closest('#st-start')) {
+      runSpeedTest();
+      return;
+    }
+    if (e.target.closest('[data-st-close], .modal__close')) {
+      stopTest();
+      m.close();
+    }
+  });
+}
+
 export default {
   openFreeCountriesModal,
   showCatalogLoadingModal,
@@ -1179,4 +1381,5 @@ export default {
   openLegalModal,
   openRemoteControlModal,
   showHardwareRecommendationModal,
+  openSpeedTestModal,
 };

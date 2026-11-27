@@ -561,7 +561,12 @@ public class ExoPlayerPlugin extends Plugin {
         player.setHandleAudioBecomingNoisy(true);
 
         LayoutInflater inflater = LayoutInflater.from(getContext());
-        playerView = (PlayerView) inflater.inflate(com.freeiptv.app.R.layout.exo_player_texture_view, null);
+        JSObject hwReport = HardwareEvaluator.evaluate(context);
+        boolean useTextureView = hwReport != null && hwReport.optBoolean("isHardwareLimited", false);
+        int layoutRes = useTextureView
+                ? com.freeiptv.app.R.layout.exo_player_real_texture_view
+                : com.freeiptv.app.R.layout.exo_player_texture_view;
+        playerView = (PlayerView) inflater.inflate(layoutRes, null);
         playerView.setPlayer(player);
         playerView.setUseController(false);
         playerView.setBackgroundColor(Color.BLACK);
@@ -848,6 +853,7 @@ public class ExoPlayerPlugin extends Plugin {
 
                 DefaultExtractorsFactory extractorsFactory = new DefaultExtractorsFactory()
                         .setConstantBitrateSeekingEnabled(true)
+                        .setTsExtractorTimestampSearchBytes(282000)
                         .setTsExtractorFlags(
                                 DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
                                 | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS

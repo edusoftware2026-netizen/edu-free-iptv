@@ -88,7 +88,13 @@ function bindBackButton() {
       });
       if (backHandle?.catch) backHandle.catch(() => {});
       const stateHandle = App.addListener('appStateChange', ({ isActive }) => {
-        if (!isActive) Logger.flush();
+        if (!isActive) {
+          Logger.flush();
+          const cur = Player.getCurrent?.();
+          if (cur && cur.mode !== 'external') {
+            Player.stop({ silent: true }).catch(() => {});
+          }
+        }
       });
       if (stateHandle?.catch) stateHandle.catch(() => {});
     } catch (_) {}
